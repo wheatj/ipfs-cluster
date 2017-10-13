@@ -399,6 +399,18 @@ operations on the contacted peer. By default, all peers will sync.
 			},
 		},
 		{
+			Name: "graph",
+			Usage: "Display connectivity of cluster nodes",
+			Description: `
+This command queries peers in the cluster to determine their inter-connectivity
+and display an ascii graph showing who is connected
+`,
+			Flags:     []cli.Flag{parseFlag(formatGPInfo)},
+			Action: func(c *cli.Context) error {
+				return nil
+			},
+		},
+		{
 			Name:  "recover",
 			Usage: "Recover tracked items in error state",
 			Description: `
