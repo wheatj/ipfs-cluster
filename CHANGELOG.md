@@ -1,5 +1,21 @@
 # ipfs-cluster changelog
 
+### v0.3.1 - 2017-12-06
+
+This release includes changes around the consensus state management, so that upgrades can be performed when the internal format changes. It also comes with several features and changes to support a live deployment and integration with IPFS pin-bot.
+
+* Features
+ * `ipfs-cluster-service state upgrade` | @194
+ * `ipfs-cluster-test` Docker image runs with `ipfs:master` | @155 | @259
+ * `ipfs-cluster` Docker image only runs `ipfs-cluster-service` (and not the ipfs daemon anymore) | @197 | @155 | @259
+ * Support for DNS multiaddresses for cluster peers | @155 | @259
+ * Add configuration section and options for `pin_tracker` | @155 | @259
+ * Add `local` flag to Status, Sync, Recover endpoints which allows to run this operations only in the peer receiving the request | @155 | @259
+ * Add Pin names | @249
+ * Add Peer names | @250
+
+This release should stay backwards compatible with the previous one. Nevertheless, some REST API endpoints take the `local` flag, and matching new Go public functions have been added (`RecoverAllLocal`, `SyncAllLocal`...).
+
 ### v0.3.0 - 2017-11-15
 
 This release introduces Raft 1.0.0 and incorporates deep changes to the management of the cluster peerset.
