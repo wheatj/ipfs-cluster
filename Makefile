@@ -1,5 +1,5 @@
-gx_version=v0.12.0
-gx-go_version=v1.5.0
+gx_version=v0.12.1
+gx-go_version=v1.6.0
 
 deptools=deptools
 
@@ -59,6 +59,10 @@ gx: $(gx_bin) $(gx-go_bin)
 deps: gx
 	$(gx_bin) install --global
 	$(gx-go_bin) rewrite
+
+check:
+	go vet ./...
+	golint -min_confidence 0.3 ./...
 
 test: deps
 	go test -tags silent -v ./...

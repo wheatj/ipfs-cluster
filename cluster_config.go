@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -43,6 +44,9 @@ type Config struct {
 	// the Consensus component.
 	ID         peer.ID
 	PrivateKey crypto.PrivKey
+
+	// User-defined peername for use as human-readable identifier.
+	Peername string
 
 	// Cluster secret for private network. Peers will be in the same cluster if and
 	// only if they have the same ClusterSecret. The cluster secret must be exactly
@@ -100,6 +104,7 @@ type Config struct {
 // like strings, and key names aim to be self-explanatory for the user.
 type configJSON struct {
 	ID                  string   `json:"id"`
+	Peername            string   `json:"peername"`
 	PrivateKey          string   `json:"private_key"`
 	Secret              string   `json:"secret"`
 	Peers               []string `json:"peers"`
@@ -158,7 +163,7 @@ func (cfg *Config) Validate() error {
 	}
 
 	if cfg.PrivateKey == nil {
-		return errors.New("No cluster.private_key set")
+		return errors.New("no cluster.private_key set")
 	}
 
 	if cfg.Peers == nil {
@@ -194,6 +199,12 @@ func (cfg *Config) Validate() error {
 
 // this just sets non-generated defaults
 func (cfg *Config) setDefaults() {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = ""
+	}
+	cfg.Peername = hostname
+
 	addr, _ := ma.NewMultiaddr(DefaultListenAddr)
 	cfg.ListenAddr = addr
 	cfg.Peers = []ma.Multiaddr{}
@@ -226,6 +237,8 @@ func (cfg *Config) LoadJSON(raw []byte) error {
 	}
 	cfg.ID = id
 
+	config.SetIfNotDefault(jcfg.Peername, &cfg.Peername)
+
 	pkb, err := base64.StdEncoding.DecodeString(jcfg.PrivateKey)
 	if err != nil {
 		err = fmt.Errorf("error decoding private_key: %s", err)
@@ -240,7 +253,7 @@ func (cfg *Config) LoadJSON(raw []byte) error {
 
 	clusterSecret, err := DecodeClusterSecret(jcfg.Secret)
 	if err != nil {
-		err = fmt.Errorf("error loading cluster secret from config: ", err)
+		err = fmt.Errorf("error loading cluster secret from config: %s", err)
 		return err
 	}
 	cfg.Secret = clusterSecret
@@ -330,6 +343,7 @@ func (cfg *Config) ToJSON() (raw []byte, err error) {
 
 	// Set all configuration fields
 	jcfg.ID = cfg.ID.Pretty()
+	jcfg.Peername = cfg.Peername
 	jcfg.PrivateKey = pKey
 	jcfg.Secret = EncodeClusterSecret(cfg.Secret)
 	jcfg.Peers = clusterPeers
@@ -366,7 +380,7 @@ func DecodeClusterSecret(hexSecret string) ([]byte, error) {
 	case 32:
 		return secret, nil
 	default:
-		return nil, fmt.Errorf("Input secret is %d bytes, cluster secret should be 32.", secretLen)
+		return nil, fmt.Errorf("input secret is %d bytes, cluster secret should be 32", secretLen)
 	}
 }
 
@@ -379,7 +393,7 @@ func generateClusterSecret() ([]byte, error) {
 	secretBytes := make([]byte, 32)
 	_, err := crand.Read(secretBytes)
 	if err != nil {
-		return nil, fmt.Errorf("Error reading from rand: %v", err)
+		return nil, fmt.Errorf("error reading from rand: %v", err)
 	}
 	return secretBytes, nil
 }

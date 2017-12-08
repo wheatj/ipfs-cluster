@@ -3,17 +3,24 @@ package main
 import (
 	"errors"
 	"io/ioutil"
-	
+
 	ipfscluster "github.com/ipfs/ipfs-cluster"
-	"github.com/ipfs/ipfs-cluster/state/mapstate"
 	"github.com/ipfs/ipfs-cluster/consensus/raft"
+	"github.com/ipfs/ipfs-cluster/state/mapstate"
 )
 
+func upgrade() error  {
+	// Load configs
+	cfg, clusterCfg, _, _, consensusCfg, _, _, _, _ := makeConfigs()
+	
+	// Execution lock
+	err := locker.lock()
+	if err != nil {
+		return err
+	}
+	defer locker.tryUnlock()
 
-func upgrade() error {
-	//Load configs                                                             
-	cfg, clusterCfg, _, _, consensusCfg, _, _, _ := makeConfigs()
-	err := cfg.LoadJSONFromFile(configPath)
+	err = cfg.LoadJSONFromFile(configPath)
 	if err != nil {
 		return err
 	}
@@ -26,8 +33,8 @@ func upgrade() error {
 		return err
 	}
 	if !snapExists {
-		logger.Error("No raft state currently exists to upgrade from")
-		return errors.New("No snapshot could be found")
+		logger.Error("no raft state currently exists to upgrade from")
+		return errors.New("no snapshot could be found")
 	}
 
 	// Restore the state from snapshot
@@ -44,15 +51,14 @@ func upgrade() error {
 	return nil
 }
 
-
 func validateVersion(cfg *ipfscluster.Config, cCfg *raft.Config) error {
 	state := mapstate.NewMapState()
 	r, snapExists, err := raft.LastStateRaw(cCfg)
 	if !snapExists && err != nil {
-		logger.Error("Error before reading latest snapshot.")
+		logger.Error("error before reading latest snapshot.")
 		return err
 	} else if snapExists && err != nil {
-		logger.Error("Error after reading last snapshot. Snapshot potentially corrupt.")
+		logger.Error("error after reading last snapshot. Snapshot potentially corrupt.")
 		return err
 	} else if snapExists && err == nil {
 		raw, err := ioutil.ReadAll(r)
@@ -61,7 +67,7 @@ func validateVersion(cfg *ipfscluster.Config, cCfg *raft.Config) error {
 		}
 		err = state.Unmarshal(raw)
 		if err != nil {
-			logger.Error("Error unmarshalling snapshot. Snapshot potentially corrupt.")
+			logger.Error("error unmarshalling snapshot. Snapshot potentially corrupt.")
 			return err
 		}
 		if state.GetVersion() != state.Version {
@@ -71,7 +77,7 @@ func validateVersion(cfg *ipfscluster.Config, cCfg *raft.Config) error {
 			logger.Error("To launch a node without this state, rename the consensus data directory.")
 			logger.Error("Hint, the default is .ipfs-cluster/ipfs-cluster-data.")
 			logger.Error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-			return errors.New("Outdated state version stored")
+			return errors.New("outdated state version stored")
 		}
 	} // !snapExists && err == nil // no existing state, no check needed
 	return nil

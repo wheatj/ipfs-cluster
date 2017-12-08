@@ -1,7 +1,7 @@
 // Package api holds declarations for types used in ipfs-cluster APIs to make
 // them re-usable across differen tools. This include RPC API "Serial[izable]"
 // versions for types. The Go API uses natives types, while RPC API,
-// REST APIs etc use serializable types (i.e. json format). Converstion methods
+// REST APIs etc use serializable types (i.e. json format). Conversion methods
 // exists between types.
 //
 // Note that all conversion methods ignore any parsing errors. All values must
@@ -143,9 +143,7 @@ func (gpis GlobalPinInfoSerial) ToGlobalPinInfo() GlobalPinInfo {
 	return gpi
 }
 
-// PinInfo holds information about local pins. PinInfo is
-// serialized when requesting the Global status, therefore
-// we cannot use *cid.Cid.
+// PinInfo holds information about local pins.
 type PinInfo struct {
 	Cid    *cid.Cid
 	Peer   peer.ID
@@ -239,6 +237,7 @@ type ID struct {
 	RPCProtocolVersion    protocol.ID
 	Error                 string
 	IPFS                  IPFSID
+	Peername              string
 	//PublicKey          crypto.PubKey
 }
 
@@ -253,6 +252,7 @@ type IDSerial struct {
 	RPCProtocolVersion    string           `json:"rpc_protocol_version"`
 	Error                 string           `json:"error"`
 	IPFS                  IPFSIDSerial     `json:"ipfs"`
+	Peername              string           `json:"peername"`
 	//PublicKey          []byte
 }
 
@@ -279,6 +279,7 @@ func (id ID) ToSerial() IDSerial {
 		RPCProtocolVersion:    string(id.RPCProtocolVersion),
 		Error:                 id.Error,
 		IPFS:                  id.IPFS.ToSerial(),
+		Peername:              id.Peername,
 	}
 }
 
@@ -306,6 +307,7 @@ func (ids IDSerial) ToID() ID {
 	id.RPCProtocolVersion = protocol.ID(ids.RPCProtocolVersion)
 	id.Error = ids.Error
 	id.IPFS = ids.IPFS.ToIPFSID()
+	id.Peername = ids.Peername
 	return id
 }
 
@@ -350,6 +352,7 @@ func (addrsS MultiaddrsSerial) ToMultiaddrs() []ma.Multiaddr {
 // future.
 type Pin struct {
 	Cid               *cid.Cid
+	Name              string
 	Allocations       []peer.ID
 	ReplicationFactor int
 }
@@ -364,6 +367,7 @@ func PinCid(c *cid.Cid) Pin {
 // PinSerial is a serializable version of Pin
 type PinSerial struct {
 	Cid               string   `json:"cid"`
+	Name              string   `json:"name"`
 	Allocations       []string `json:"allocations"`
 	Everywhere        bool     `json:"everywhere,omitempty"` // legacy
 	ReplicationFactor int      `json:"replication_factor"`
@@ -379,6 +383,7 @@ func (pin Pin) ToSerial() PinSerial {
 
 	return PinSerial{
 		Cid:               pin.Cid.String(),
+		Name:              pin.Name,
 		Allocations:       allocs,
 		ReplicationFactor: pin.ReplicationFactor,
 	}
@@ -400,6 +405,7 @@ func (pins PinSerial) ToPin() Pin {
 
 	return Pin{
 		Cid:               c,
+		Name:              pins.Name,
 		Allocations:       allocs,
 		ReplicationFactor: pins.ReplicationFactor,
 	}

@@ -101,6 +101,8 @@ func NewManager() *Manager {
 
 }
 
+// Shutdown makes sure all configuration save operations are finished
+// before returning.
 func (cfg *Manager) Shutdown() {
 	cfg.cancel()
 	cfg.wg.Wait()
@@ -201,7 +203,7 @@ func (cfg *Manager) RegisterComponent(t SectionType, ccfg ComponentConfig) {
 	cfg.sections[t][ccfg.ConfigKey()] = ccfg
 }
 
-// Validate checks that all the registered componenets in this
+// Validate checks that all the registered components in this
 // Manager have valid configurations. It also makes sure that
 // the main Cluster compoenent exists.
 func (cfg *Manager) Validate() error {
@@ -283,6 +285,10 @@ func (cfg *Manager) LoadJSON(bs []byte) error {
 					return err
 				}
 				logger.Debugf("%s section configuration loaded", name)
+			} else {
+				logger.Warningf("%s section is empty, generating default", name)
+				component.SetBaseDir(dir)
+				component.Default()
 			}
 		}
 		return nil

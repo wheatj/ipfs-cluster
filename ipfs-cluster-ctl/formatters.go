@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,70 +10,88 @@ import (
 	"github.com/ipfs/ipfs-cluster/api"
 )
 
-const (
-	formatNone = iota
-	formatID
-	formatGPInfo
-	formatString
-	formatVersion
-	formatPin
-	formatError
-)
+func jsonFormatObject(resp interface{}) {
+	switch resp.(type) {
+	case nil:
+		return
+	case api.ID:
+		jsonFormatPrint(resp.(api.ID).ToSerial())
+	case api.GlobalPinInfo:
+		jsonFormatPrint(resp.(api.GlobalPinInfo).ToSerial())
+	case api.Pin:
+		jsonFormatPrint(resp.(api.Pin).ToSerial())
+	case api.Version:
+		jsonFormatPrint(resp.(api.Version))
+	case api.Error:
+		jsonFormatPrint(resp.(api.Error))
+	case []api.ID:
+		r := resp.([]api.ID)
+		serials := make([]api.IDSerial, len(r), len(r))
+		for i, item := range r {
+			serials[i] = item.ToSerial()
+		}
+		jsonFormatPrint(serials)
 
-type format int
-
-func textFormat(body []byte, format int) {
-	if len(body) < 2 {
-		fmt.Println("")
-	}
-
-	slice := body[0] == '['
-	if slice {
-		textFormatSlice(body, format)
-	} else {
-		textFormatObject(body, format)
-	}
-}
-
-func textFormatObject(body []byte, format int) {
-	switch format {
-	case formatID:
-		var obj api.IDSerial
-		textFormatDecodeOn(body, &obj)
-		textFormatPrintIDSerial(&obj)
-	case formatGPInfo:
-		var obj api.GlobalPinInfoSerial
-		textFormatDecodeOn(body, &obj)
-		textFormatPrintGPinfo(&obj)
-	case formatVersion:
-		var obj api.Version
-		textFormatDecodeOn(body, &obj)
-		textFormatPrintVersion(&obj)
-	case formatPin:
-		var obj api.PinSerial
-		textFormatDecodeOn(body, &obj)
-		textFormatPrintPin(&obj)
-	case formatError:
-		var obj api.Error
-		textFormatDecodeOn(body, &obj)
-		textFormatPrintError(&obj)
+	case []api.GlobalPinInfo:
+		r := resp.([]api.GlobalPinInfo)
+		serials := make([]api.GlobalPinInfoSerial, len(r), len(r))
+		for i, item := range r {
+			serials[i] = item.ToSerial()
+		}
+		jsonFormatPrint(serials)
+	case []api.Pin:
+		r := resp.([]api.Pin)
+		serials := make([]api.PinSerial, len(r), len(r))
+		for i, item := range r {
+			serials[i] = item.ToSerial()
+		}
+		jsonFormatPrint(serials)
 	default:
-		var obj interface{}
-		textFormatDecodeOn(body, &obj)
-		fmt.Printf("%s\n", obj)
+		checkErr("", errors.New("unsupported type returned"))
 	}
 }
 
-func textFormatSlice(body []byte, format int) {
-	var rawMsg []json.RawMessage
-	textFormatDecodeOn(body, &rawMsg)
-	for _, raw := range rawMsg {
-		textFormatObject(raw, format)
-	}
+func jsonFormatPrint(obj interface{}) {
+	j, err := json.MarshalIndent(obj, "", "    ")
+	checkErr("generating json output", err)
+	fmt.Printf("%s\n", j)
 }
 
-func textFormatDecodeOn(body []byte, obj interface{}) {
-	checkErr("decoding JSON", json.Unmarshal(body, obj))
+func textFormatObject(resp interface{}) {
+	switch resp.(type) {
+	case nil:
+		return
+	case api.ID:
+		serial := resp.(api.ID).ToSerial()
+		textFormatPrintIDSerial(&serial)
+	case api.GlobalPinInfo:
+		serial := resp.(api.GlobalPinInfo).ToSerial()
+		textFormatPrintGPInfo(&serial)
+	case api.Pin:
+		serial := resp.(api.Pin).ToSerial()
+		textFormatPrintPin(&serial)
+	case api.Version:
+		serial := resp.(api.Version)
+		textFormatPrintVersion(&serial)
+	case api.Error:
+		serial := resp.(api.Error)
+		textFormatPrintError(&serial)
+	case []api.ID:
+		for _, item := range resp.([]api.ID) {
+			textFormatObject(item)
+		}
+
+	case []api.GlobalPinInfo:
+		for _, item := range resp.([]api.GlobalPinInfo) {
+			textFormatObject(item)
+		}
+	case []api.Pin:
+		for _, item := range resp.([]api.Pin) {
+			textFormatObject(item)
+		}
+	default:
+		checkErr("", errors.New("unsupported type returned"))
+	}
 }
 
 func textFormatPrintIDSerial(obj *api.IDSerial) {
@@ -81,7 +100,7 @@ func textFormatPrintIDSerial(obj *api.IDSerial) {
 		return
 	}
 
-	fmt.Printf("%s | Sees %d other peers\n", obj.ID, len(obj.ClusterPeers)-1)
+	fmt.Printf("%s | %s | Sees %d other peers\n", obj.ID, obj.Peername, len(obj.ClusterPeers)-1)
 	addrs := make(sort.StringSlice, 0, len(obj.Addresses))
 	for _, a := range obj.Addresses {
 		addrs = append(addrs, string(a))
@@ -107,7 +126,7 @@ func textFormatPrintIDSerial(obj *api.IDSerial) {
 	}
 }
 
-func textFormatPrintGPinfo(obj *api.GlobalPinInfoSerial) {
+func textFormatPrintGPInfo(obj *api.GlobalPinInfoSerial) {
 	fmt.Printf("%s :\n", obj.Cid)
 	peers := make(sort.StringSlice, 0, len(obj.PeerMap))
 	for k := range obj.PeerMap {
@@ -125,12 +144,22 @@ func textFormatPrintGPinfo(obj *api.GlobalPinInfoSerial) {
 	}
 }
 
+func textFormatPrintPInfo(obj *api.PinInfoSerial) {
+	gpinfo := api.GlobalPinInfoSerial{
+		Cid: obj.Cid,
+		PeerMap: map[string]api.PinInfoSerial{
+			obj.Peer: *obj,
+		},
+	}
+	textFormatPrintGPInfo(&gpinfo)
+}
+
 func textFormatPrintVersion(obj *api.Version) {
 	fmt.Println(obj.Version)
 }
 
 func textFormatPrintPin(obj *api.PinSerial) {
-	fmt.Printf("%s | Allocations: ", obj.Cid)
+	fmt.Printf("%s | %s | Allocations: ", obj.Cid, obj.Name)
 	if obj.ReplicationFactor < 0 {
 		fmt.Printf("[everywhere]\n")
 	} else {
@@ -141,7 +170,7 @@ func textFormatPrintPin(obj *api.PinSerial) {
 }
 
 func textFormatPrintError(obj *api.Error) {
-	fmt.Printf("An error ocurred:\n")
+	fmt.Printf("An error occurred:\n")
 	fmt.Printf("  Code: %d\n", obj.Code)
 	fmt.Printf("  Message: %s\n", obj.Message)
 }

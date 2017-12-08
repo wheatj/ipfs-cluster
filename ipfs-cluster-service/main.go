@@ -139,6 +139,10 @@ func out(m string, a ...interface{}) {
 func checkErr(doing string, err error) {
 	if err != nil {
 		out("error %s: %s\n", doing, err)
+		err = locker.tryUnlock()
+		if err != nil {
+			out("error releasing execution lock: %s\n", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -217,7 +221,7 @@ configuration.
 			},
 			Action: func(c *cli.Context) error {
 				userSecret, userSecretDefined := userProvidedSecret(c.Bool("custom-secret"))
-				cfg, clustercfg, _, _, _, _, _, _ := makeConfigs()
+				cfg, clustercfg, _, _, _, _, _, _, _ := makeConfigs()
 				defer cfg.Shutdown() // wait for saves
 
 				// Generate defaults for all registered components
@@ -251,13 +255,13 @@ configuration.
 This command upgrades the internal state of the ipfs-cluster node 
 specified in the latest raft snapshot. The state format is migrated from the 
 version of the snapshot to the version supported by the current cluster version. 
-To succesfully run an upgrade of an entire cluster, shut down each peer without
+To successfully run an upgrade of an entire cluster, shut down each peer without
 removal, upgrade state using this command, and restart every peer.
 `,
 					Action: func(c *cli.Context) error {
 						err := upgrade()
 						checkErr("upgrading state", err)
-						return nil
+						return err
 					},
 				},
 			},
@@ -276,6 +280,9 @@ removal, upgrade state using this command, and restart every peer.
 		if c.Bool("debug") {
 			setupDebug()
 		}
+
+		locker = &lock{path: absPath}
+
 		return nil
 	}
 
@@ -287,18 +294,24 @@ removal, upgrade state using this command, and restart every peer.
 // run daemon() by default, or error.
 func run(c *cli.Context) error {
 	if len(c.Args()) > 0 {
-		return fmt.Errorf("Unknown subcommand. Run \"%s help\" for more info", programName)
+		return fmt.Errorf("unknown subcommand. Run \"%s help\" for more info", programName)
 	}
 	return daemon(c)
 }
 
 func daemon(c *cli.Context) error {
 	// Load all the configurations
-	cfg, clusterCfg, apiCfg, ipfshttpCfg, consensusCfg, monCfg, diskInfCfg, numpinInfCfg := makeConfigs()
+	cfg, clusterCfg, apiCfg, ipfshttpCfg, consensusCfg, trackerCfg, monCfg, diskInfCfg, numpinInfCfg := makeConfigs()
+	// Execution lock
+	err := locker.lock()
+	checkErr("acquiring execution lock", err)
+	defer locker.tryUnlock()
+
+	// Load all the configurations
 	// always wait for configuration to be saved
 	defer cfg.Shutdown()
 
-	err := cfg.LoadJSONFromFile(configPath)
+	err = cfg.LoadJSONFromFile(configPath)
 	checkErr("loading configuration", err)
 
 	if a := c.String("bootstrap"); a != "" {
@@ -328,7 +341,7 @@ func daemon(c *cli.Context) error {
 	err = validateVersion(clusterCfg, consensusCfg)
 	checkErr("validating version", err)
 
-	tracker := maptracker.NewMapPinTracker(clusterCfg.ID)
+	tracker := maptracker.NewMapPinTracker(trackerCfg, clusterCfg.ID)
 	mon, err := basic.NewMonitor(monCfg)
 	checkErr("creating Monitor component", err)
 	informer, alloc := setupAllocation(c.String("alloc"), diskInfCfg, numpinInfCfg)
@@ -361,7 +374,6 @@ func daemon(c *cli.Context) error {
 			//case <-cluster.Ready():
 		}
 	}
-	return nil
 }
 
 var facilities = []string{
@@ -453,12 +465,13 @@ func promptUser(msg string) string {
 	return scanner.Text()
 }
 
-func makeConfigs() (*config.Manager, *ipfscluster.Config, *rest.Config, *ipfshttp.Config, *raft.Config, *basic.Config, *disk.Config, *numpin.Config) {
+func makeConfigs() (*config.Manager, *ipfscluster.Config, *rest.Config, *ipfshttp.Config, *raft.Config, *maptracker.Config, *basic.Config, *disk.Config, *numpin.Config) {
 	cfg := config.NewManager()
 	clusterCfg := &ipfscluster.Config{}
 	apiCfg := &rest.Config{}
 	ipfshttpCfg := &ipfshttp.Config{}
 	consensusCfg := &raft.Config{}
+	trackerCfg := &maptracker.Config{}
 	monCfg := &basic.Config{}
 	diskInfCfg := &disk.Config{}
 	numpinInfCfg := &numpin.Config{}
@@ -466,8 +479,9 @@ func makeConfigs() (*config.Manager, *ipfscluster.Config, *rest.Config, *ipfshtt
 	cfg.RegisterComponent(config.API, apiCfg)
 	cfg.RegisterComponent(config.IPFSConn, ipfshttpCfg)
 	cfg.RegisterComponent(config.Consensus, consensusCfg)
+	cfg.RegisterComponent(config.PinTracker, trackerCfg)
 	cfg.RegisterComponent(config.Monitor, monCfg)
 	cfg.RegisterComponent(config.Informer, diskInfCfg)
 	cfg.RegisterComponent(config.Informer, numpinInfCfg)
-	return cfg, clusterCfg, apiCfg, ipfshttpCfg, consensusCfg, monCfg, diskInfCfg, numpinInfCfg
+	return cfg, clusterCfg, apiCfg, ipfshttpCfg, consensusCfg, trackerCfg, monCfg, diskInfCfg, numpinInfCfg
 }

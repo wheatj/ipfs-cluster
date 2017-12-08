@@ -2,7 +2,7 @@
 
 ### v0.3.1 - 2017-12-06
 
-This release includes changes around the consensus state management, so that upgrades can be performed when the internal format changes. It also comes with several features and changes to support a live deployment and integration with IPFS pin-bot.
+This release includes changes around the consensus state management, so that upgrades can be performed when the internal format changes. It also comes with several features and changes to support a live deployment and integration with IPFS pin-bot, including a REST API client for Go.
 
 * Features
  * `ipfs-cluster-service state upgrade` | @194
@@ -13,6 +13,7 @@ This release includes changes around the consensus state management, so that upg
  * Add `local` flag to Status, Sync, Recover endpoints which allows to run this operations only in the peer receiving the request | @155 | @259
  * Add Pin names | @249
  * Add Peer names | @250
+ * New REST API Client module `github.com/ipfs/ipfs-cluster/api/rest/client` allows to integrate against cluster | @260 | @263 | @266
 
 This release should stay backwards compatible with the previous one. Nevertheless, some REST API endpoints take the `local` flag, and matching new Go public functions have been added (`RecoverAllLocal`, `SyncAllLocal`...).
 

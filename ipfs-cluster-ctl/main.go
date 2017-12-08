@@ -1,14 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"crypto/tls"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -18,6 +12,9 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 	ma "github.com/multiformats/go-multiaddr"
 	cli "github.com/urfave/cli"
+
+	"github.com/ipfs/ipfs-cluster/api"
+	"github.com/ipfs/ipfs-cluster/api/rest/client"
 )
 
 const programName = `ipfs-cluster-ctl`
@@ -27,15 +24,15 @@ const programName = `ipfs-cluster-ctl`
 const Version = "0.3.0"
 
 var (
-	defaultHost      = fmt.Sprintf("127.0.0.1:%d", 9094)
-	defaultTimeout   = 60
-	defaultProtocol  = "http"
-	defaultTransport = http.DefaultTransport
-	defaultUsername  = ""
-	defaultPassword  = ""
+	defaultHost     = "/ip4/127.0.0.1/tcp/9094"
+	defaultTimeout  = 60
+	defaultUsername = ""
+	defaultPassword = ""
 )
 
 var logger = logging.Logger("cluster-ctl")
+
+var globalClient *client.Client
 
 // Description provides a short summary of the functionality of this tool
 var Description = fmt.Sprintf(`
@@ -83,7 +80,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "host, l",
 			Value: defaultHost,
-			Usage: "host:port of the IPFS Cluster service API",
+			Usage: "multiaddress of the IPFS Cluster service API",
 		},
 		cli.BoolFlag{
 			Name:  "https, s",
@@ -120,24 +117,34 @@ requires authorization. implies --https, which you can disable with --force-http
 	}
 
 	app.Before = func(c *cli.Context) error {
-		defaultHost = c.String("host")
-		defaultTimeout = c.Int("timeout")
-		// check for BasicAuth credentials
-		if c.IsSet("basic-auth") {
-			defaultUsername, defaultPassword = parseCredentials(c.String("basic-auth"))
-			// turn on HTTPS unless flag says not to
-			if !c.Bool("force-http") {
-				err := c.Set("https", "true")
-				checkErr("setting HTTPS flag for BasicAuth (this should never fail)", err)
-			}
+		cfg := &client.Config{}
+		addr, err := ma.NewMultiaddr(c.String("host"))
+		checkErr("parsing host multiaddress", err)
+		cfg.APIAddr = addr
+
+		cfg.Timeout = time.Duration(c.Int("timeout")) * time.Second
+		cfg.SSL = c.Bool("https")
+		cfg.NoVerifyCert = c.Bool("no-check-certificate")
+		user, pass := parseCredentials(c.String("basic-auth"))
+		cfg.Username = user
+		cfg.Password = pass
+		if user != "" && !cfg.SSL && !c.Bool("force-http") {
+			logger.Warning("SSL automatically enabled with basic auth credentials. Set \"force-http\" to disable")
+			cfg.SSL = true
 		}
-		if c.Bool("https") {
-			defaultProtocol = "https"
-			defaultTransport = newTLSTransport(c.Bool("no-check-certificate"))
-		}
+
 		if c.Bool("debug") {
 			logging.SetLogLevel("cluster-ctl", "debug")
+			logging.SetLogLevel("apiclient", "debug")
 		}
+
+		enc := c.String("encoding")
+		if enc != "text" && enc != "json" {
+			checkErr("", errors.New("unsupported encoding"))
+		}
+
+		globalClient, err = client.NewClient(cfg)
+		checkErr("creating API client", err)
 		return nil
 	}
 
@@ -149,10 +156,10 @@ requires authorization. implies --https, which you can disable with --force-http
 This command displays information about the peer that the tool is contacting
 (usually running in localhost).
 `,
-			Flags: []cli.Flag{parseFlag(formatID)},
+			Flags: []cli.Flag{},
 			Action: func(c *cli.Context) error {
-				resp := request("GET", "/id", nil)
-				formatResponse(c, resp)
+				resp, cerr := globalClient.ID()
+				formatResponse(c, resp, cerr)
 				return nil
 			},
 		},
@@ -166,11 +173,11 @@ This command displays information about the peer that the tool is contacting
 					Description: `
 This command provides a list of the ID information of all the peers in the Cluster.
 `,
-					Flags:     []cli.Flag{parseFlag(formatID)},
+					Flags:     []cli.Flag{},
 					ArgsUsage: " ",
 					Action: func(c *cli.Context) error {
-						resp := request("GET", "/peers", nil)
-						formatResponse(c, resp)
+						resp, cerr := globalClient.Peers()
+						formatResponse(c, resp, cerr)
 						return nil
 					},
 				},
@@ -183,20 +190,16 @@ succeed, the new peer needs to be reachable and any other member of the cluster
 should be online. The operation returns the ID information for the new peer.
 `,
 					ArgsUsage: "<multiaddress>",
-					Flags:     []cli.Flag{parseFlag(formatID)},
+					Flags:     []cli.Flag{},
 					Action: func(c *cli.Context) error {
 						addr := c.Args().First()
 						if addr == "" {
 							return cli.NewExitError("Error: a multiaddress argument is needed", 1)
 						}
-						_, err := ma.NewMultiaddr(addr)
+						maddr, err := ma.NewMultiaddr(addr)
 						checkErr("parsing multiaddress", err)
-						addBody := peerAddBody{addr}
-						var buf bytes.Buffer
-						enc := json.NewEncoder(&buf)
-						enc.Encode(addBody)
-						resp := request("POST", "/peers", &buf)
-						formatResponse(c, resp)
+						resp, cerr := globalClient.PeerAdd(maddr)
+						formatResponse(c, resp, cerr)
 						return nil
 					},
 				},
@@ -210,13 +213,13 @@ operation to succeed, otherwise some nodes may be left with an outdated list of
 cluster peers.
 `,
 					ArgsUsage: "<peer ID>",
-					Flags:     []cli.Flag{parseFlag(formatNone)},
+					Flags:     []cli.Flag{},
 					Action: func(c *cli.Context) error {
 						pid := c.Args().First()
-						_, err := peer.IDB58Decode(pid)
+						p, err := peer.IDB58Decode(pid)
 						checkErr("parsing peer ID", err)
-						resp := request("DELETE", "/peers/"+pid, nil)
-						formatResponse(c, resp)
+						cerr := globalClient.PeerRm(p)
+						formatResponse(c, nil, cerr)
 						return nil
 					},
 				},
@@ -243,25 +246,29 @@ peers should pin this content.
 `,
 					ArgsUsage: "<CID>",
 					Flags: []cli.Flag{
-						parseFlag(formatGPInfo),
 						cli.IntFlag{
 							Name:  "replication, r",
 							Value: 0,
 							Usage: "Sets a custom replication factor for this pin",
 						},
+						cli.StringFlag{
+							Name:  "name, n",
+							Value: "",
+							Usage: "Sets a name for this pin",
+						},
 					},
 					Action: func(c *cli.Context) error {
 						cidStr := c.Args().First()
-						_, err := cid.Decode(cidStr)
+						ci, err := cid.Decode(cidStr)
 						checkErr("parsing cid", err)
-						query := fmt.Sprintf("?replication_factor=%d", c.Int("replication"))
-						resp := request("POST", "/pins/"+cidStr+query, nil)
-						formatResponse(c, resp)
-						if resp.StatusCode < 300 {
-							time.Sleep(1000 * time.Millisecond)
-							resp = request("GET", "/pins/"+cidStr, nil)
-							formatResponse(c, resp)
+						cerr := globalClient.Pin(ci, c.Int("replication"), c.String("name"))
+						if cerr != nil {
+							formatResponse(c, nil, cerr)
+							return nil
 						}
+						time.Sleep(1000 * time.Millisecond)
+						resp, cerr := globalClient.Status(ci, false)
+						formatResponse(c, resp, cerr)
 						return nil
 					},
 				},
@@ -277,17 +284,19 @@ in the cluster. The CID should disappear from the list offered by "pin ls",
 although unpinning operations in the cluster may take longer or fail.
 `,
 					ArgsUsage: "<CID>",
-					Flags:     []cli.Flag{parseFlag(formatGPInfo)},
+					Flags:     []cli.Flag{},
 					Action: func(c *cli.Context) error {
 						cidStr := c.Args().First()
-						_, err := cid.Decode(cidStr)
+						ci, err := cid.Decode(cidStr)
 						checkErr("parsing cid", err)
-						resp := request("DELETE", "/pins/"+cidStr, nil)
-						if resp.StatusCode < 300 {
-							time.Sleep(1000 * time.Millisecond)
-							resp := request("GET", "/pins/"+cidStr, nil)
-							formatResponse(c, resp)
+						cerr := globalClient.Unpin(ci)
+						if cerr != nil {
+							formatResponse(c, nil, cerr)
+							return nil
 						}
+						time.Sleep(1000 * time.Millisecond)
+						resp, cerr := globalClient.Status(ci, false)
+						formatResponse(c, resp, cerr)
 						return nil
 					},
 				},
@@ -302,15 +311,18 @@ merely represents the list of pins which are part of the shared state of
 the cluster. For IPFS-status information about the pins, use "status".
 `,
 					ArgsUsage: "[CID]",
-					Flags:     []cli.Flag{parseFlag(formatPin)},
+					Flags:     []cli.Flag{},
 					Action: func(c *cli.Context) error {
 						cidStr := c.Args().First()
 						if cidStr != "" {
-							_, err := cid.Decode(cidStr)
+							ci, err := cid.Decode(cidStr)
 							checkErr("parsing cid", err)
+							resp, cerr := globalClient.Allocation(ci)
+							formatResponse(c, resp, cerr)
+						} else {
+							resp, cerr := globalClient.Allocations()
+							formatResponse(c, resp, cerr)
 						}
-						resp := request("GET", "/allocations/"+cidStr, nil)
-						formatResponse(c, resp)
 						return nil
 					},
 				},
@@ -327,17 +339,25 @@ item.
 
 The status of a CID may not be accurate. A manual sync can be triggered
 with "sync".
+
+When the --local flag is passed, it will only fetch the status from the
+contacted cluster peer. By default, status will be fetched from all peers.
 `,
 			ArgsUsage: "[CID]",
-			Flags:     []cli.Flag{parseFlag(formatGPInfo)},
+			Flags: []cli.Flag{
+				localFlag(),
+			},
 			Action: func(c *cli.Context) error {
 				cidStr := c.Args().First()
 				if cidStr != "" {
-					_, err := cid.Decode(cidStr)
+					ci, err := cid.Decode(cidStr)
 					checkErr("parsing cid", err)
+					resp, cerr := globalClient.Status(ci, c.Bool("local"))
+					formatResponse(c, resp, cerr)
+				} else {
+					resp, cerr := globalClient.StatusAll(c.Bool("local"))
+					formatResponse(c, resp, cerr)
 				}
-				resp := request("GET", "/pins/"+cidStr, nil)
-				formatResponse(c, resp)
 				return nil
 			},
 		},
@@ -355,20 +375,25 @@ have changed status because of the sync or are in error state in some node,
 therefore, the output should be empty if no operations were performed.
 
 CIDs in error state may be manually recovered with "recover".
+
+When the --local flag is passed, it will only trigger sync
+operations on the contacted peer. By default, all peers will sync.
 `,
 			ArgsUsage: "[CID]",
-			Flags:     []cli.Flag{parseFlag(formatGPInfo)},
+			Flags: []cli.Flag{
+				localFlag(),
+			},
 			Action: func(c *cli.Context) error {
 				cidStr := c.Args().First()
-				var resp *http.Response
 				if cidStr != "" {
-					_, err := cid.Decode(cidStr)
+					ci, err := cid.Decode(cidStr)
 					checkErr("parsing cid", err)
-					resp = request("POST", "/pins/"+cidStr+"/sync", nil)
+					resp, cerr := globalClient.Sync(ci, c.Bool("local"))
+					formatResponse(c, resp, cerr)
 				} else {
-					resp = request("POST", "/pins/sync", nil)
+					resp, cerr := globalClient.SyncAll(c.Bool("local"))
+					formatResponse(c, resp, cerr)
 				}
-				formatResponse(c, resp)
 				return nil
 			},
 		},
@@ -376,25 +401,30 @@ CIDs in error state may be manually recovered with "recover".
 			Name:  "recover",
 			Usage: "Recover tracked items in error state",
 			Description: `
-This command asks Cluster peers to re-track or re-forget an item which is in
+This command asks Cluster peers to re-track or re-forget CIDs in
 error state, usually because the IPFS pin or unpin operation has failed.
 
 The command will wait for any operations to succeed and will return the status
-of the item upon completion.
+of the item upon completion. Note that, when running on the full sets of tracked
+CIDs (without argument), it may take a considerably long time.
+
+When the --local flag is passed, it will only trigger recover
+operations on the contacted peer (as opposed to on every peer).
 `,
-			ArgsUsage: "<CID>",
-			Flags:     []cli.Flag{parseFlag(formatGPInfo)},
+			ArgsUsage: "[CID]",
+			Flags: []cli.Flag{
+				localFlag(),
+			},
 			Action: func(c *cli.Context) error {
 				cidStr := c.Args().First()
-				var resp *http.Response
 				if cidStr != "" {
-					_, err := cid.Decode(cidStr)
+					ci, err := cid.Decode(cidStr)
 					checkErr("parsing cid", err)
-					resp = request("POST", "/pins/"+cidStr+"/recover", nil)
-					formatResponse(c, resp)
-
+					resp, cerr := globalClient.Recover(ci, c.Bool("local"))
+					formatResponse(c, resp, cerr)
 				} else {
-					return cli.NewExitError("A CID is required", 1)
+					resp, cerr := globalClient.RecoverAll(c.Bool("local"))
+					formatResponse(c, resp, cerr)
 				}
 				return nil
 			},
@@ -407,10 +437,10 @@ This command retrieves the IPFS Cluster version and can be used
 to check that it matches the CLI version (shown by -v).
 `,
 			ArgsUsage: " ",
-			Flags:     []cli.Flag{parseFlag(formatVersion)},
+			Flags:     []cli.Flag{},
 			Action: func(c *cli.Context) error {
-				resp := request("GET", "/version", nil)
-				formatResponse(c, resp)
+				resp, cerr := globalClient.Version()
+				formatResponse(c, resp, cerr)
 				return nil
 			},
 		},
@@ -437,6 +467,13 @@ func parseFlag(t int) cli.IntFlag {
 	}
 }
 
+func localFlag() cli.BoolFlag {
+	return cli.BoolFlag{
+		Name:  "local",
+		Usage: "run operation only on the contacted peer",
+	}
+}
+
 func walkCommands(cmds []cli.Command, parentHelpName string) {
 	for _, c := range cmds {
 		h := c.HelpName
@@ -449,63 +486,35 @@ func walkCommands(cmds []cli.Command, parentHelpName string) {
 	}
 }
 
-func request(method, path string, body io.Reader, args ...string) *http.Response {
-	ctx, cancel := context.WithTimeout(context.Background(),
-		time.Duration(defaultTimeout)*time.Second)
-	defer cancel()
-
-	u := defaultProtocol + "://" + defaultHost + path
-	// turn /a/{param0}/{param1} into /a/this/that
-	for i, a := range args {
-		p := fmt.Sprintf("{param%d}", i)
-		u = strings.Replace(u, p, a, 1)
-	}
-	u = strings.TrimSuffix(u, "/")
-
-	logger.Debugf("%s: %s", method, u)
-
-	r, err := http.NewRequest(method, u, body)
-	checkErr("creating request", err)
-	r.WithContext(ctx)
-
-	if len(defaultUsername) != 0 {
-		r.SetBasicAuth(defaultUsername, defaultPassword)
+func formatResponse(c *cli.Context, resp interface{}, err *api.Error) {
+	enc := c.GlobalString("encoding")
+	if resp == nil && err == nil {
+		return
 	}
 
-	client := &http.Client{Transport: defaultTransport}
-	resp, err := client.Do(r)
-	checkErr(fmt.Sprintf("performing request to %s", defaultHost), err)
-	return resp
-}
-
-func formatResponse(c *cli.Context, r *http.Response) {
-	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
-	checkErr("reading body", err)
-	logger.Debugf("Response body: %s", body)
-
-	switch {
-	case r.StatusCode == http.StatusAccepted:
-		logger.Debug("Request accepted")
-	case r.StatusCode == http.StatusNoContent:
-		logger.Debug("Request suceeded. Response has no content")
-	default:
-		enc := c.GlobalString("encoding")
-
+	if err != nil {
 		switch enc {
 		case "text":
-			if r.StatusCode > 399 {
-				textFormat(body, formatError)
-				os.Exit(2)
-			} else {
-				textFormat(body, c.Int("parseAs"))
-			}
+			textFormatPrintError(err)
+		case "json":
+			jsonFormatPrint(err)
 		default:
-			var resp interface{}
-			err = json.Unmarshal(body, &resp)
-			checkErr("decoding response", err)
-			prettyPrint(body)
+			checkErr("", errors.New("unsupported encoding selected"))
 		}
+		if err.Code == 0 {
+			os.Exit(1) // problem with the call
+		} else {
+			os.Exit(2) // call went fine, response has an error
+		}
+	}
+
+	switch enc {
+	case "text":
+		textFormatObject(resp)
+	case "json":
+		jsonFormatObject(resp)
+	default:
+		checkErr("", errors.New("unsupported encoding selected"))
 	}
 }
 
@@ -523,71 +532,3 @@ func parseCredentials(userInput string) (string, string) {
 		return "", ""
 	}
 }
-
-// JSON output is nice and allows users to build on top.
-func prettyPrint(buf []byte) {
-	var dst bytes.Buffer
-	err := json.Indent(&dst, buf, "", "  ")
-	checkErr("indenting json", err)
-	fmt.Printf("%s", dst.String())
-}
-
-func newTLSTransport(skipVerifyCert bool) *http.Transport {
-	// based on https://github.com/denji/golang-tls
-	tlsCfg := &tls.Config{
-		MinVersion:               tls.VersionTLS12,
-		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
-		PreferServerCipherSuites: true,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-		},
-		InsecureSkipVerify: skipVerifyCert,
-	}
-	return &http.Transport{
-		TLSClientConfig: tlsCfg,
-	}
-}
-
-/*
-// old ugly pretty print
-func prettyPrint(obj interface{}, indent int) {
-	ind := func() string {
-		var str string
-		for i := 0; i < indent; i++ {
-			str += " "
-		}
-		return str
-	}
-
-	switch obj.(type) {
-	case []interface{}:
-		slice := obj.([]interface{})
-		for _, elem := range slice {
-			prettyPrint(elem, indent+2)
-		}
-	case map[string]interface{}:
-		m := obj.(map[string]interface{})
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			v := m[k]
-			fmt.Printf(ind()+"%s: ", k)
-			switch v.(type) {
-			case []interface{}, map[string]interface{}:
-				fmt.Println()
-				prettyPrint(v, indent+4)
-			default:
-				prettyPrint(v, indent)
-			}
-		}
-	default:
-		fmt.Println(obj)
-	}
-}
-*/
