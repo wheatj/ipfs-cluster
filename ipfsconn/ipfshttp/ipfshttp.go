@@ -92,7 +92,7 @@ type ipfsAddResp struct {
 	Bytes uint64
 }
 
-type ipfsPeers struct {
+type ipfsSwarmPeersResp struct {
 	Peers ipfsPeer[]
 }
 
@@ -854,27 +854,28 @@ func (ipfs *Connector) RepoSize() (uint64, error) {
 
 
 // SwarmPeers returns the peers currently connected to this ipfs daemon
-func (ipfs *Connector) SwarmPeers() ([]peer.ID, error) {
+func (ipfs *Connector) SwarmPeers() (api.SwarmPeers, error) {
+	swarm := api.SwarmPeers{}
 	res, err := ipfs.get("swarm/peers")
 	if err != nil {
 		logger.Error(err)
 		return nil, err
 	}
-	var peersRaw ipfsPeers
+	var peersRaw ipfsSwarmPeersResp
 	err = json.Unmarshal(res, &peersRaw)
 	if err != nil {
 		logger.Error(err)
 		return nil, err
 	}
 
-	peers := make([]peer.ID)
-	for _, p := range peersRaw.Peers {
+	swarm.Peers := make([]peer.ID, len(peersRaw.Peers))
+	for i, p := range peersRaw.Peers {
 		pID, err := peer.IDB58Decode(p.Peer)
 		if err != nil {
 			logger.Error(err)
-			return nil, err
+			return swarm, err
 		}
-		peers.append(pID)
+		swarm.Peers[i] = pID
 	}
-	return peers
+	return swarm, nil
 }

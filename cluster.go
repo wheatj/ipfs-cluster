@@ -1051,41 +1051,69 @@ func (c *Cluster) Peers() []api.ID {
 	return peers
 }
 
-// GetConnectGraph returns a description of which cluster peers and ipfs
+// ConnectGraph returns a description of which cluster peers and ipfs
 // daemons are connected to each other
-func (c *Cluster) GetConnectGraph() api.ConnectGraph {
+func (c *Cluster) ConnectGraph() api.ConnectGraph, err {
 	ipfsLinks := make(map[Peer.ID][]Peer.ID)
 	clusterLinks := make(map[Peer.ID][]Peer.ID)
 	clusterToIpfs := make(map[Peer.ID]Peer.ID)
-	
-	// Determine own cluster ID and peers
 
-	members := c.peerManager.peers()
-	// Determine own ipfs ID and its peers
-	ipfsID, _ := c.ipfs.ID()
-	ipfsPeers, _ := c.ipfs.Peers()
-	
-	// Query cluster peers for their cluster and ipfs peers
-	for _, cp := members {
-		// Get their peer list, add it to cluster peers map
-		// Get their ipfs id, add it to the clusterToIpfs map
-		// Get their ipfs daemon's peers, add to the ipfs peers map
-
-		/// Perhaps this whole process should go on in a BFS way, until all members have been seen before
-		/// this way the whole connectivity graph (at least up to a conn component) will be found starting
-		/// from any peer
+	// This node's connections
+	ipfsID, err := c.ipfs.ID()
+	if err != nil {
+		return nil, err
 	}
+	ipfsPeers, err := c.ipfs.SwarmPeers()
+	if err != nil {
+		return nil, err
+	}
+	clusterToIPFs[c.ID] = ipfsID
+	ipfsLinks[ipfsID]   = ipfsPeers
 
+	// Remote connections
+	members := c.peerManager.peers()
+	for _, p := members {
+		var idS api.IDSerial
+		err = c.rpcClient.Call(p,
+			"Cluster",
+			"ID",
+			struct{}{},
+			&idS
+		)
+		if err != nil {
+			continue
+		}
+		id := idS.ToID()
+		clusterLinks[id.ID] = id.ClusterPeers
+		clusterLinks[c.ID] = id.ID
+		ipfsId := id.IPFS.ID
+		if ipfsId.Error != "" { //Only recording no-err ipfs-conns
+			continue
+		}
+		clusterToIpfs[id.ID] = ipfsId
+
+		// Get their ipfs daemon's peers, add to the ipfs peers map
+		var swarmPeersS api.SwarmPeersSerial
+		err = c.rpcClient.Call(p,
+			"Cluster",
+			"IPFSSwarmPeers",
+			struct{}{},
+			&swarmPeersS
+		)
+		if err != nil {
+			ipfsLinks[ipfsId] = make([]peer.ID)
+			continue
+		}
+		swarmPeers := swarmPeersS.ToSwarmPeers()
+		ipfsLinks[ipfsId] = swarmPeers.Peers
+	}
 
 	return api.ConnectGraph {
 		ClusterID: c.id,
 		IPFSLinks: ipfsLinks,
 		ClusterLinks: clusterLinks,
 		ClusterToIPFS: clusterToIpfs
-	}
-
-
-
+	}, nil
 }
 
 

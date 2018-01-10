@@ -224,6 +224,22 @@ cluster peers.
 						return nil
 					},
 				},
+				{
+					Name: "graph",
+					Usage: "display connectivity of cluster nodes",
+					Description: `
+This command queries all connected cluster peers and their ipfs nodes to generate a
+graph of the connections.  Output is a dot file encoding the cluster's connection state
+`,
+					Flags: []cli.Flag{},
+					Action: func(c *cli.Context) error {
+						resp, cerr := globalClient.GetConnectGraph()
+						// might need to do some graph processing
+						// in another function here
+						fmt.Println("The response: %v", resp)
+						return nil
+					},
+				},
 			},
 		},
 		{
@@ -395,18 +411,6 @@ operations on the contacted peer. By default, all peers will sync.
 					resp, cerr := globalClient.SyncAll(c.Bool("local"))
 					formatResponse(c, resp, cerr)
 				}
-				return nil
-			},
-		},
-		{
-			Name: "graph",
-			Usage: "Display connectivity of cluster nodes",
-			Description: `
-This command queries peers in the cluster to determine their inter-connectivity
-and display an ascii graph showing who is connected
-`,
-			Flags:     []cli.Flag{parseFlag(formatGPInfo)},
-			Action: func(c *cli.Context) error {
 				return nil
 			},
 		},
