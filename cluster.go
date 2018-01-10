@@ -1053,69 +1053,81 @@ func (c *Cluster) Peers() []api.ID {
 
 // ConnectGraph returns a description of which cluster peers and ipfs
 // daemons are connected to each other
-func (c *Cluster) ConnectGraph() api.ConnectGraph, err {
-	ipfsLinks := make(map[Peer.ID][]Peer.ID)
-	clusterLinks := make(map[Peer.ID][]Peer.ID)
-	clusterToIpfs := make(map[Peer.ID]Peer.ID)
+func (c *Cluster) ConnectGraph() (api.ConnectGraph, error) {
+	ipfsLinks := make(map[peer.ID][]peer.ID)
+	clusterLinks := make(map[peer.ID][]peer.ID)
+	clusterToIpfs := make(map[peer.ID]peer.ID)
 
 	// This node's connections
-	ipfsID, err := c.ipfs.ID()
-	if err != nil {
-		return nil, err
+	thisIpfsId, err := c.ipfs.ID()
+	if thisIpfsId.Error != "" {
+		logger.Debugf("Error getting local ipfs info: %s", thisIpfsId.Error)
+	} else {
+		clusterToIpfs[c.id] = thisIpfsId.ID
+		ipfsPeers, err := c.ipfs.SwarmPeers()
+		if err != nil {
+			ipfsLinks[thisIpfsId.ID] = ipfsPeers.Peers
+		} else {
+			ipfsLinks[thisIpfsId.ID] = make([]peer.ID, 0)
+		}
 	}
-	ipfsPeers, err := c.ipfs.SwarmPeers()
+	clusterLinks[c.id] = make([]peer.ID, 0)
+	members, err := c.consensus.Peers()
 	if err != nil {
-		return nil, err
+		return api.ConnectGraph{}, err
 	}
-	clusterToIPFs[c.ID] = ipfsID
-	ipfsLinks[ipfsID]   = ipfsPeers
 
 	// Remote connections
-	members := c.peerManager.peers()
-	for _, p := members {
+	for _, p := range members {
+		// Cluster connections
 		var idS api.IDSerial
 		err = c.rpcClient.Call(p,
 			"Cluster",
 			"ID",
 			struct{}{},
-			&idS
+			&idS,
 		)
-		if err != nil {
+		if err != nil { // Only setting cluster connections when no error occurs
+			logger.Debugf("error reaching cluster peer %s: %s", peer.IDB58Encode(p), err.Error())
 			continue
 		}
 		id := idS.ToID()
-		clusterLinks[id.ID] = id.ClusterPeers
-		clusterLinks[c.ID] = id.ID
+		if id.ID != p {
+			logger.Debugf("cluster peer %s claims pid: %s", peer.IDB58Encode(p), peer.IDB58Encode(id.ID))
+			continue
+		}
+		clusterLinks[p] = id.ClusterPeers
+		clusterLinks[c.id] = append(clusterLinks[c.id], id.ID)
+
+		// IPFS connections
 		ipfsId := id.IPFS.ID
-		if ipfsId.Error != "" { //Only recording no-err ipfs-conns
+		if id.IPFS.Error != "" { // Only setting ipfs connections when no error occurs
+			logger.Debugf("ipfs id: %s has error: %s", peer.IDB58Encode(ipfsId), id.IPFS.Error)
 			continue
 		}
 		clusterToIpfs[id.ID] = ipfsId
-
-		// Get their ipfs daemon's peers, add to the ipfs peers map
+		ipfsLinks[c.id] = make([]peer.ID, 0)
 		var swarmPeersS api.SwarmPeersSerial
 		err = c.rpcClient.Call(p,
 			"Cluster",
 			"IPFSSwarmPeers",
 			struct{}{},
-			&swarmPeersS
+			&swarmPeersS,
 		)
 		if err != nil {
-			ipfsLinks[ipfsId] = make([]peer.ID)
 			continue
 		}
 		swarmPeers := swarmPeersS.ToSwarmPeers()
 		ipfsLinks[ipfsId] = swarmPeers.Peers
 	}
 
-	return api.ConnectGraph {
-		ClusterID: c.id,
-		IPFSLinks: ipfsLinks,
-		ClusterLinks: clusterLinks,
-		ClusterToIPFS: clusterToIpfs
+	return api.ConnectGraph{
+		ClusterID:     c.id,
+		IPFSLinks:     ipfsLinks,
+		ClusterLinks:  clusterLinks,
+		ClustertoIPFS: clusterToIpfs,
 	}, nil
 }
-
 
 // makeHost makes a libp2p-host.
 func makeHost(ctx context.Context, cfg *Config) (host.Host, error) {

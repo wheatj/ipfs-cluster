@@ -225,7 +225,7 @@ cluster peers.
 					},
 				},
 				{
-					Name: "graph",
+					Name:  "graph",
 					Usage: "display connectivity of cluster nodes",
 					Description: `
 This command queries all connected cluster peers and their ipfs nodes to generate a
@@ -236,7 +236,7 @@ graph of the connections.  Output is a dot file encoding the cluster's connectio
 						resp, cerr := globalClient.GetConnectGraph()
 						// might need to do some graph processing
 						// in another function here
-						fmt.Println("The response: %v", resp)
+						fmt.Println("The response: %v\n the err: %v", resp, cerr)
 						return nil
 					},
 				},

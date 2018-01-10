@@ -335,8 +335,8 @@ func (api *API) versionHandler(w http.ResponseWriter, r *http.Request) {
 	sendResponse(w, err, v)
 }
 
-func (rest *RESTAPI) graphHandler(w http.ResponseWriter, r *http.Request) {
-	var graph api.ConnectGraphSerial
+func (rest *API) graphHandler(w http.ResponseWriter, r *http.Request) {
+	var graph types.ConnectGraphSerial
 	err := rest.rpcClient.Call("",
 		"Cluster",
 		"ConnectGraph",

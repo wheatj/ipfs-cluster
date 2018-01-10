@@ -267,6 +267,12 @@ func (ids *IPFSIDSerial) ToIPFSID() IPFSID {
 }
 
 // ConnectGraph holds information about the connectivity of the cluster
+//   To read, traverse the ids of ClusterLinks[ClusterID].  The peers
+//   with these ids are exactly those reachable without error and each id
+//   is guaranteed to be a key in ClusterLinks.  Iff there was an error reading
+//   the IPFSID of the peer then id will not be a key of ClustertoIPFS or
+//   IPFSLinks. Finally iff id is a key of ClustertoIPFS then id will be a key
+//   of IPFSLinks.  In the event of a SwarmPeers error IPFSLinks[id] == [].
 type ConnectGraph struct {
 	ClusterID     peer.ID
 	IPFSLinks     map[peer.ID][]peer.ID // ipfs to ipfs links
@@ -283,15 +289,15 @@ type ConnectGraphSerial struct {
 }
 
 // ToSerial converts a ConnectGraph to its Go-serializable version
-func (ConnectGraph) ToSerial() ConnectGraphSerial {
-	IPFSLinksSerial := SerializeLinkMap(ConnectGraph.IPFSLinks)
-	ClusterLinksSerial := SerializeLinkMap(ConnectGraph.ClusterLinks)
+func (cg ConnectGraph) ToSerial() ConnectGraphSerial {
+	IPFSLinksSerial := SerializeLinkMap(cg.IPFSLinks)
+	ClusterLinksSerial := SerializeLinkMap(cg.ClusterLinks)
 	ClustertoIPFSSerial := make(map[string]string)
-	for k,v := range ConnectGraph.ClustertoIPFS {
-		ClustertoIPFSSerial[peer.IDB58Encode(k)] := peer.IDB58Encode(v)
+	for k, v := range cg.ClustertoIPFS {
+		ClustertoIPFSSerial[peer.IDB58Encode(k)] = peer.IDB58Encode(v)
 	}
 	return ConnectGraphSerial{
-		ClusterID:     peer.IDB58Encode(ConnectGraph.ClusterID),
+		ClusterID:     peer.IDB58Encode(cg.ClusterID),
 		IPFSLinks:     IPFSLinksSerial,
 		ClusterLinks:  ClusterLinksSerial,
 		ClustertoIPFS: ClustertoIPFSSerial,
@@ -300,9 +306,9 @@ func (ConnectGraph) ToSerial() ConnectGraphSerial {
 
 func SerializeLinkMap(Links map[peer.ID][]peer.ID) map[string][]string {
 	LinksSerial := make(map[string][]string)
-	for k,v := range Links  {
+	for k, v := range Links {
 		kS := peer.IDB58Encode(k)
-		IPFSLinksSerial[kS] = PeersToStrings(v)
+		LinksSerial[kS] = PeersToStrings(v)
 	}
 	return LinksSerial
 }
@@ -318,16 +324,16 @@ type SwarmPeersSerial struct {
 }
 
 // ToSerial converts SwarmPeers to its Go-serializeable version
-func (swarm SwarmPeers) ToSerial() {
-	return SwarmPeersSerial {
+func (swarm SwarmPeers) ToSerial() SwarmPeersSerial {
+	return SwarmPeersSerial{
 		Peers: PeersToStrings(swarm.Peers),
 	}
 }
 
 // ToSwarmPeers converts a SwarmPeersSerial object to SwarmPeers.
-func (swarmS SwarmPeersSerial) ToSwarmPeers() {
-	return SwarmPeers {
-		Peers: StringsToPeers(swarmS.Peers)
+func (swarmS SwarmPeersSerial) ToSwarmPeers() SwarmPeers {
+	return SwarmPeers{
+		Peers: StringsToPeers(swarmS.Peers),
 	}
 }
 
