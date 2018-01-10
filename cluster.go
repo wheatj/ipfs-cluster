@@ -1090,7 +1090,7 @@ func (c *Cluster) ConnectGraph() (api.ConnectGraph, error) {
 			continue
 		}
 		clusterToIpfs[id.ID] = ipfsId
-		ipfsLinks[c.id] = make([]peer.ID, 0)
+		ipfsLinks[ipfsId] = make([]peer.ID, 0)
 		var swarmPeersS api.SwarmPeersSerial
 		err = c.rpcClient.Call(p,
 			"Cluster",
