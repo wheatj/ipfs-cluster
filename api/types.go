@@ -267,12 +267,17 @@ func (ids *IPFSIDSerial) ToIPFSID() IPFSID {
 }
 
 // ConnectGraph holds information about the connectivity of the cluster
-//   To read, traverse the ids of ClusterLinks[ClusterID].  The peers
-//   with these ids are exactly those reachable without error and each id
-//   is guaranteed to be a key in ClusterLinks.  Iff there was an error reading
-//   the IPFSID of the peer then id will not be a key of ClustertoIPFS or
-//   IPFSLinks. Finally iff id is a key of ClustertoIPFS then id will be a key
-//   of IPFSLinks.  In the event of a SwarmPeers error IPFSLinks[id] == [].
+//   To read, traverse the keys of ClusterLinks.  Each such id is one of
+//   the peers that peer "ClusterID" sees itself connected to.  ClusterLinks[id]
+//   in turn lists the ids that peer "id" sees itself connected to.  It is
+//   possible that ClusterID sees itself connected to id but can not reach id
+//   over rpc, in which case ClusterLinks[id] == [], as id's view of its
+//   connectivity can not be retrieved.
+//
+//   Iff there was an error reading the IPFSID of the peer then id will not be a
+//   key of ClustertoIPFS or IPFSLinks. Finally iff id is a key of ClustertoIPFS
+//   then id will be a key of IPFSLinks.  In the event of a SwarmPeers error
+//   IPFSLinks[id] == [].
 type ConnectGraph struct {
 	ClusterID     peer.ID
 	IPFSLinks     map[peer.ID][]peer.ID // ipfs to ipfs links

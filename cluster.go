@@ -1058,28 +1058,13 @@ func (c *Cluster) ConnectGraph() (api.ConnectGraph, error) {
 	clusterLinks := make(map[peer.ID][]peer.ID)
 	clusterToIpfs := make(map[peer.ID]peer.ID)
 
-	// This node's connections
-	thisIpfsId, err := c.ipfs.ID()
-	if thisIpfsId.Error != "" {
-		logger.Debugf("Error getting local ipfs info: %s", thisIpfsId.Error)
-	} else {
-		clusterToIpfs[c.id] = thisIpfsId.ID
-		ipfsPeers, err := c.ipfs.SwarmPeers()
-		if err != nil {
-			ipfsLinks[thisIpfsId.ID] = ipfsPeers.Peers
-		} else {
-			ipfsLinks[thisIpfsId.ID] = make([]peer.ID, 0)
-		}
-	}
-	clusterLinks[c.id] = make([]peer.ID, 0)
 	members, err := c.consensus.Peers()
 	if err != nil {
 		return api.ConnectGraph{}, err
 	}
-
-	// Remote connections
 	for _, p := range members {
 		// Cluster connections
+		clusterLinks[p] = make([]peer.ID, 0)
 		var idS api.IDSerial
 		err = c.rpcClient.Call(p,
 			"Cluster",
@@ -1097,7 +1082,6 @@ func (c *Cluster) ConnectGraph() (api.ConnectGraph, error) {
 			continue
 		}
 		clusterLinks[p] = id.ClusterPeers
-		clusterLinks[c.id] = append(clusterLinks[c.id], id.ID)
 
 		// IPFS connections
 		ipfsId := id.IPFS.ID
