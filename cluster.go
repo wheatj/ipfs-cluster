@@ -1065,31 +1065,46 @@ func (c *Cluster) ConnectGraph() (api.ConnectGraph, error) {
 	for _, p := range members {
 		// Cluster connections
 		clusterLinks[p] = make([]peer.ID, 0)
-		var idS api.IDSerial
+		var sPeers []api.IDSerial
+		var pId api.ID
 		err = c.rpcClient.Call(p,
 			"Cluster",
-			"ID",
+			"Peers",
 			struct{}{},
-			&idS,
+			&sPeers,
 		)
 		if err != nil { // Only setting cluster connections when no error occurs
-			logger.Debugf("error reaching cluster peer %s: %s", peer.IDB58Encode(p), err.Error())
+			logger.Debugf("RPC error reaching cluster peer %s: %s", p.Pretty(), err.Error())
 			continue
 		}
-		id := idS.ToID()
-		if id.ID != p {
-			logger.Debugf("cluster peer %s claims pid: %s", peer.IDB58Encode(p), peer.IDB58Encode(id.ID))
-			continue
+
+		selfConnection := false
+		for _, sId := range sPeers {
+			id := sId.ToID()
+			if id.Error != "" {
+				logger.Debugf("Peer %s errored connecting to its peer %s", p.Pretty(), id.ID.Pretty())
+				continue
+			}
+			if id.ID == p {
+				selfConnection = true
+				pId = id
+			} else {
+				clusterLinks[p] = append(clusterLinks[p], id.ID)
+			}
 		}
-		clusterLinks[p] = id.ClusterPeers
 
 		// IPFS connections
-		ipfsId := id.IPFS.ID
-		if id.IPFS.Error != "" { // Only setting ipfs connections when no error occurs
-			logger.Debugf("ipfs id: %s has error: %s", peer.IDB58Encode(ipfsId), id.IPFS.Error)
+		if !selfConnection {
+			logger.Debugf("cluster peer %s not its own peer.  No ipfs info ", p.Pretty())
 			continue
 		}
-		clusterToIpfs[id.ID] = ipfsId
+
+		ipfsId := pId.IPFS.ID
+		if pId.IPFS.Error != "" { // Only setting ipfs connections when no error occurs
+			logger.Debugf("ipfs id: %s has error: %s", ipfsId.Pretty(), pId.IPFS.Error)
+			continue
+		}
+		clusterToIpfs[p] = ipfsId
 		ipfsLinks[ipfsId] = make([]peer.ID, 0)
 		var swarmPeersS api.SwarmPeersSerial
 		err = c.rpcClient.Call(p,

@@ -268,9 +268,9 @@ func (ids *IPFSIDSerial) ToIPFSID() IPFSID {
 
 // ConnectGraph holds information about the connectivity of the cluster
 //   To read, traverse the keys of ClusterLinks.  Each such id is one of
-//   the peers that peer "ClusterID" sees itself connected to.  ClusterLinks[id]
+//   the peers of the "ClusterID" peer running the query.  ClusterLinks[id]
 //   in turn lists the ids that peer "id" sees itself connected to.  It is
-//   possible that ClusterID sees itself connected to id but can not reach id
+//   possible that id is a peer of ClusterID, but ClusterID can not reach id
 //   over rpc, in which case ClusterLinks[id] == [], as id's view of its
 //   connectivity can not be retrieved.
 //
