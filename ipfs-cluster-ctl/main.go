@@ -261,13 +261,6 @@ graph of the connections.  Output is a dot file encoding the cluster's connectio
 						defer w.Close()
 						err = makeDot(resp, w, c.Bool("all-ipfs-peers"))
 						checkErr("printing graph", err)
-						// Remove extra ipfs nodes
-
-						// Iterate through keys of maps to get links
-
-						// Iterate through values of maps to get edges
-
-						// Write to the output writer as we go
 
 						return nil
 					},

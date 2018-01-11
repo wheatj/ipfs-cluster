@@ -101,7 +101,7 @@ func (dW dotWriter) writeEdge(from string, fT nodeType, to string, tT nodeType) 
 	if err != nil {
 		return err
 	}
-	edgeStr := fmt.Sprintf("%s -> %s\n", toStr, fromStr)
+	edgeStr := fmt.Sprintf("%s -> %s\n", fromStr, toStr)
 	n, err := io.WriteString(dW.w, edgeStr)
 	if err == nil && n != len([]byte(edgeStr)) {
 		err = errUnfinishedWrite
@@ -130,7 +130,8 @@ func (dW *dotWriter) writeNode(id string, nT nodeType) error {
 }
 
 func (dW *dotWriter) print() error {
-	err := dW.writeComment("The nodes of the connectivity graph")
+	_, err := io.WriteString(dW.w, "digraph cluster {\n\n")
+	err = dW.writeComment("The nodes of the connectivity graph")
 	if err != nil {
 		return err
 	}
@@ -213,6 +214,10 @@ func (dW *dotWriter) print() error {
 				return err
 			}
 		}
+	}
+	_, err = io.WriteString(dW.w, "\n}")
+	if err != nil {
+		return err
 	}
 
 	return nil
