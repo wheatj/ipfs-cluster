@@ -24,7 +24,7 @@ func makeDot(cg api.ConnectGraphSerial, w io.Writer, allIpfs bool) error {
 	for k,v := range cg.IPFSLinks {
 		ipfsEdges[k] = make([]string, 0)
 		for _, id := range v {
-			if _, ok := cg.IPFSLinks[id]; ok {
+			if _, ok := cg.IPFSLinks[id]; ok || allIpfs {
 				ipfsEdges[k] = append(ipfsEdges[k], id)
 			}
 			if allIpfs { // include all swarm peers in the graph
@@ -215,7 +215,7 @@ func (dW *dotWriter) print() error {
 			}
 		}
 	}
-	_, err = io.WriteString(dW.w, "\n}")
+	_, err = io.WriteString(dW.w, "\n }")
 	if err != nil {
 		return err
 	}
