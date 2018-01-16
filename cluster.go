@@ -996,18 +996,23 @@ func (c *Cluster) pin(pin api.Pin, blacklist []peer.ID) (bool, error) {
 	switch {
 	case rplMin == -1 && rplMax == -1:
 		pin.Allocations = []peer.ID{}
-		logger.Infof("IPFS cluster pinning %s everywhere:", pin.Cid)
 	default:
 		allocs, err := c.allocate(pin.Cid, rplMin, rplMax, blacklist)
 		if err != nil {
 			return false, err
 		}
 		pin.Allocations = allocs
-		if c.getCurrentPin(pin.Cid).Equals(pin) {
-			// skip pinning
-			logger.Debugf("pinning %s skipped: already correctly allocated", pin.Cid)
-			return false, nil
-		}
+	}
+
+	if c.getCurrentPin(pin.Cid).Equals(pin) {
+		// skip pinning
+		logger.Debugf("pinning %s skipped: already correctly allocated", pin.Cid)
+		return false, nil
+	}
+
+	if len(pin.Allocations) == 0 {
+		logger.Infof("IPFS cluster pinning %s everywhere:", pin.Cid)
+	} else {
 		logger.Infof("IPFS cluster pinning %s on %s:", pin.Cid, pin.Allocations)
 	}
 
