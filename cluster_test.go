@@ -239,7 +239,7 @@ func TestClusterPinGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !pin.Cid.Equals(c) || pin.ReplicationFactorMax != -1 || pin.ReplicationFactorMax != -1 {
+	if !pin.Cid.Equals(c) || pin.ReplicationFactorMin != -1 || pin.ReplicationFactorMax != -1 {
 		t.Error("the Pin does not look as expected")
 	}
 
