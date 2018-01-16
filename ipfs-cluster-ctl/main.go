@@ -250,7 +250,7 @@ peers should pin this content.
 						cli.IntFlag{
 							Name:  "replication, r",
 							Value: 0,
-							Usage: "Sets a custom replication factor for this pin (overrides r-max and r-min)",
+							Usage: "Sets a custom replication factor (overrides r-max and r-min)",
 						},
 						cli.IntFlag{
 							Name:  "replication-min, r-min",
