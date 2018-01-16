@@ -1,6 +1,7 @@
 package ipfscluster
 
 import (
+	"fmt"
 	"math/rand"
 	"sync"
 	"testing"
@@ -34,7 +35,9 @@ func peerManagerClusters(t *testing.T) ([]*Cluster, []*test.IpfsMock) {
 }
 
 func clusterAddr(c *Cluster) ma.Multiaddr {
-	return multiaddrJoin(c.config.ListenAddr, c.ID().ID)
+	cAddr, _ := ma.NewMultiaddr(fmt.Sprintf("%s/ipfs/%s", c.host.Addrs()[0], c.id.Pretty()))
+	return cAddr
+	//return multiaddrJoin(c.config.ListenAddr, c.ID().ID)
 }
 
 func TestClustersPeerAdd(t *testing.T) {
@@ -451,6 +454,8 @@ func TestClustersPeerJoinAllAtOnceWithRandomBootstrap(t *testing.T) {
 	if len(clusters) < 3 {
 		t.Skip("test needs at least 3 clusters")
 	}
+
+	delay()
 
 	// We have a 2 node cluster and the rest of nodes join
 	// one of the two seeds randomly
