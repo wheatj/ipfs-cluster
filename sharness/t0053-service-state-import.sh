@@ -27,7 +27,7 @@ test_expect_success IPFS,CLUSTER,IMPORTSTATE "state import succeeds on correct f
     ipfs-cluster-ctl status "$cid" | grep -q -i "PINNED"
 '
 
-#test_clean_ipfs
-#test_clean_cluster
+test_clean_ipfs
+test_clean_cluster
 
 test_done
