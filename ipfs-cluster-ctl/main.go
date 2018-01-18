@@ -436,7 +436,7 @@ operations on the contacted peer (as opposed to on every peer).
 			Description: "Display information on cluster health",
 			Subcommands: []cli.Command{
 				{
-					Name:  "connectivity",
+					Name:  "graph",
 					Usage: "display connectivity of cluster nodes",
 					Description: `
 This command queries all connected cluster peers and their ipfs nodes to generate a

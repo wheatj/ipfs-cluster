@@ -263,7 +263,7 @@ func (api *API) routes() []route {
 		{
 			"ConnectionGraph",
 			"GET",
-			"/graph",
+			"/health/graph",
 			api.graphHandler,
 		},
 	}
