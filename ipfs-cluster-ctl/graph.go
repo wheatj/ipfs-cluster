@@ -2,17 +2,36 @@ package main
 
 import (
 	"errors"
-	"io"
 	"fmt"
+	"io"
+	"sort"
+
+	peer "github.com/libp2p/go-libp2p-peer"
 
 	"github.com/ipfs/ipfs-cluster/api"
 )
 
+/*
+   These functions are used to write an IPFS Cluster connectivity graph to a
+   graphviz-style dot file.  Input an api.ConnectGraphSerial object, makeDot
+   does some preprocessing and then passes all 3 link maps to a
+   cluster-dotWriter which handles iterating over the link maps and writing
+   dot file node and edge statements to make a dot-file graph.  Nodes are
+   labeled with the go-libp2p-peer shortened peer id.  IPFS nodes are rendered
+   with gold boundaries, Cluster nodes with blue.  Currently preprocessing
+   consists of moving IPFS swarm peers not connected to any cluster peer to
+   the IPFSLinks map in the event that the function was invoked with the
+   allIpfs flag.  This allows all IPFS peers connected to the cluster to be
+   rendered as nodes in the final graph.
+*/
+
+// nodeType specifies the type of node being represented in the dot file:
+// either IPFS or Cluster
 type nodeType int
 
 const (
-	tCluster nodeType = iota
-	tIpfs
+	tCluster nodeType = iota // The cluster node type
+	tIpfs                    // The IPFS node type
 )
 
 var errUnfinishedWrite = errors.New("could not complete write of line to output")
@@ -21,7 +40,7 @@ var errCorruptOrdering = errors.New("expected pid to have an ordering within dot
 
 func makeDot(cg api.ConnectGraphSerial, w io.Writer, allIpfs bool) error {
 	ipfsEdges := make(map[string][]string)
-	for k,v := range cg.IPFSLinks {
+	for k, v := range cg.IPFSLinks {
 		ipfsEdges[k] = make([]string, 0)
 		for _, id := range v {
 			if _, ok := cg.IPFSLinks[id]; ok || allIpfs {
@@ -37,27 +56,26 @@ func makeDot(cg api.ConnectGraphSerial, w io.Writer, allIpfs bool) error {
 		}
 	}
 
-	dW := dotWriter {
+	dW := dotWriter{
 		w:                w,
 		ipfsEdges:        ipfsEdges,
 		clusterEdges:     cg.ClusterLinks,
 		clusterIpfsEdges: cg.ClustertoIPFS,
-		clusterOrder:    make(map[string]int, 0),
-		ipfsOrder:       make(map[string]int, 0),
+		clusterOrder:     make(map[string]int, 0),
+		ipfsOrder:        make(map[string]int, 0),
 	}
 	return dW.print()
 }
 
 type dotWriter struct {
-	clusterOrder     map[string]int
-	ipfsOrder        map[string]int
+	clusterOrder map[string]int
+	ipfsOrder    map[string]int
 
-	w                io.Writer
-	
+	w io.Writer
+
 	ipfsEdges        map[string][]string
 	clusterEdges     map[string][]string
 	clusterIpfsEdges map[string]string
-	
 }
 
 func (dW dotWriter) writeComment(comment string) error {
@@ -79,7 +97,7 @@ func (dW dotWriter) getString(id string, idT nodeType) (string, error) {
 			return "", errCorruptOrdering
 		}
 		return fmt.Sprintf("C%d", number), nil
-		
+
 	case tIpfs:
 		number, ok := dW.ipfsOrder[id]
 		if !ok {
@@ -92,7 +110,7 @@ func (dW dotWriter) getString(id string, idT nodeType) (string, error) {
 	return "", nil
 }
 
-func (dW dotWriter) writeEdge(from string, fT nodeType, to string, tT nodeType) error{
+func (dW dotWriter) writeEdge(from string, fT nodeType, to string, tT nodeType) error {
 	fromStr, err := dW.getString(from, fT)
 	if err != nil {
 		return err
@@ -139,8 +157,8 @@ func (dW *dotWriter) print() error {
 	if err != nil {
 		return err
 	}
-	// Write cluster nodes
-	for k := range dW.clusterEdges {
+	// Write cluster nodes, use sorted order for consistent labels
+	for _, k := range sortedKeys(dW.clusterEdges) {
 		err = dW.writeNode(k, tCluster)
 		if err != nil {
 			return err
@@ -150,13 +168,13 @@ func (dW *dotWriter) print() error {
 	if err != nil {
 		return err
 	}
-	
+
 	err = dW.writeComment("The ipfs peers")
 	if err != nil {
 		return err
 	}
-	// Write ipfs nodes
-	for k := range dW.ipfsEdges {
+	// Write ipfs nodes, use sorted order for consistent labels
+	for _, k := range sortedKeys(dW.ipfsEdges) {
 		err = dW.writeNode(k, tIpfs)
 		if err != nil {
 			return err
@@ -175,7 +193,7 @@ func (dW *dotWriter) print() error {
 	// Write cluster edges
 	for k, v := range dW.clusterEdges {
 		for _, id := range v {
-			err = dW.writeEdge(k,tCluster,id,tCluster)
+			err = dW.writeEdge(k, tCluster, id, tCluster)
 			if err != nil {
 				return err
 			}
@@ -192,7 +210,7 @@ func (dW *dotWriter) print() error {
 	}
 	// Write cluster to ipfs edges
 	for k, id := range dW.clusterIpfsEdges {
-		err = dW.writeEdge(k,tCluster,id,tIpfs)
+		err = dW.writeEdge(k, tCluster, id, tIpfs)
 		if err != nil {
 			return err
 		}
@@ -205,11 +223,11 @@ func (dW *dotWriter) print() error {
 	err = dW.writeComment("The swarm peer connections among ipfs daemons in the cluster")
 	if err != nil {
 		return err
-	}	
+	}
 	// Write ipfs edges
 	for k, v := range dW.ipfsEdges {
 		for _, id := range v {
-			err = dW.writeEdge(k,tIpfs,id,tIpfs)
+			err = dW.writeEdge(k, tIpfs, id, tIpfs)
 			if err != nil {
 				return err
 			}
@@ -223,16 +241,32 @@ func (dW *dotWriter) print() error {
 	return nil
 }
 
-// truncate the provided peer id string to the 3 last characters.  Odds of 
-// pairwise collisions are less than 1 in 200,000 so with 70 cluster peers  
+func sortedKeys(dict map[string][]string) []string {
+	keys := make([]string, len(dict), len(dict))
+	i := 0
+	for k := range dict {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// truncate the provided peer id string to the 3 last characters.  Odds of
+// pairwise collisions are less than 1 in 200,000 so with 70 cluster peers
 // the chances of a collision are still less than 1 in 100 (birthday paradox).
 // As clusters grow bigger than this we can provide a flag for including
 // more characters.
 func shortId(peerString string) string {
-	if len(peerString) < 3 {
-		return peerString
+	pid, err := peer.IDB58Decode(peerString)
+	if err != nil {
+		// We'll truncate ourselves
+		// Should never get here but try to match with peer:String()
+		if len(peerString) < 6 {
+
+			return fmt.Sprintf("<peer.ID %s>", peerString)
+		}
+		return fmt.Sprintf("<peer.ID %s>", peerString[:6])
 	}
-	start := len(peerString) - 3
-	end := len(peerString)
-	return peerString[start:end]
+	return pid.String()
 }

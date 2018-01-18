@@ -309,6 +309,23 @@ func (cg ConnectGraph) ToSerial() ConnectGraphSerial {
 	}
 }
 
+// ToConnectGraph converts a ConnectGraphSerial to a ConnectGraph
+func (cgs ConnectGraphSerial) ToConnectGraph() ConnectGraph {
+	ClustertoIPFS := make(map[peer.ID]peer.ID)
+	for k, v := range cgs.ClustertoIPFS {
+		pid1, _ := peer.IDB58Decode(k)
+		pid2, _ := peer.IDB58Decode(v)
+		ClustertoIPFS[pid1] = pid2
+	}
+	pid, _ := peer.IDB58Decode(cgs.ClusterID)
+	return ConnectGraph{
+		ClusterID:     pid,
+		IPFSLinks:     DeserializeLinkMap(cgs.IPFSLinks),
+		ClusterLinks:  DeserializeLinkMap(cgs.ClusterLinks),
+		ClustertoIPFS: ClustertoIPFS,
+	}
+}
+
 func SerializeLinkMap(Links map[peer.ID][]peer.ID) map[string][]string {
 	LinksSerial := make(map[string][]string)
 	for k, v := range Links {
@@ -318,28 +335,29 @@ func SerializeLinkMap(Links map[peer.ID][]peer.ID) map[string][]string {
 	return LinksSerial
 }
 
-// SwarmPeers lists an ipfs daemon's peers
-type SwarmPeers struct {
-	Peers []peer.ID
+func DeserializeLinkMap(LinksSerial map[string][]string) map[peer.ID][]peer.ID {
+	Links := make(map[peer.ID][]peer.ID)
+	for k, v := range LinksSerial {
+		pid, _ := peer.IDB58Decode(k)
+		Links[pid] = StringsToPeers(v)
+	}
+	return Links
 }
 
+// SwarmPeers lists an ipfs daemon's peers
+type SwarmPeers []peer.ID
+
 // SwarmPeersSerial is the serialized form of SwarmPeers for RPC use
-type SwarmPeersSerial struct {
-	Peers []string `json:"peers"`
-}
+type SwarmPeersSerial []string
 
 // ToSerial converts SwarmPeers to its Go-serializeable version
 func (swarm SwarmPeers) ToSerial() SwarmPeersSerial {
-	return SwarmPeersSerial{
-		Peers: PeersToStrings(swarm.Peers),
-	}
+	return PeersToStrings(swarm)
 }
 
 // ToSwarmPeers converts a SwarmPeersSerial object to SwarmPeers.
 func (swarmS SwarmPeersSerial) ToSwarmPeers() SwarmPeers {
-	return SwarmPeers{
-		Peers: StringsToPeers(swarmS.Peers),
-	}
+	return StringsToPeers(swarmS)
 }
 
 // ID holds information about the Cluster peer
