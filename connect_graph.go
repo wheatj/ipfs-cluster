@@ -31,14 +31,14 @@ func (c *Cluster) ConnectGraph() (api.ConnectGraph, error) {
 			continue
 		}
 
-		selfConnection, pId := c.recordClusterLinks(&cg, p, peersSerials[i])
+		selfConnection, pID := c.recordClusterLinks(&cg, p, peersSerials[i])
 
 		// IPFS connections
 		if !selfConnection {
 			logger.Warningf("cluster peer %s not its own peer.  No ipfs info ", p.Pretty())
 			continue
 		}
-		c.recordIPFSLinks(&cg, pId)
+		c.recordIPFSLinks(&cg, pID)
 	}
 
 	return cg, nil

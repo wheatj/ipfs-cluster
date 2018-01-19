@@ -1061,11 +1061,11 @@ func validateClusterGraph(t *testing.T, graph api.ConnectGraph, clusterIDs map[p
 
 	// Check that the cluster to ipfs connections are all recorded
 	for id := range clusterIDs {
-		if ipfsId, ok := graph.ClustertoIPFS[id]; !ok {
+		if ipfsID, ok := graph.ClustertoIPFS[id]; !ok {
 			t.Errorf("Expected graph to record peer %s's ipfs connection", id)
 		} else {
-			if ipfsId != test.TestPeerID1 {
-				t.Errorf("Unexpected error %s", ipfsId)
+			if ipfsID != test.TestPeerID1 {
+				t.Errorf("Unexpected error %s", ipfsID)
 			}
 		}
 	}
