@@ -107,7 +107,6 @@ func (dW dotWriter) getString(id string, idT nodeType) (string, error) {
 	default:
 		return "", errUnknownNodeType
 	}
-	return "", nil
 }
 
 func (dW dotWriter) writeEdge(from string, fT nodeType, to string, tT nodeType) error {
@@ -132,10 +131,10 @@ func (dW *dotWriter) writeNode(id string, nT nodeType) error {
 	var nodeStr string
 	switch nT {
 	case tCluster:
-		nodeStr = fmt.Sprintf("C%d [label=\"%s\" color=\"blue2\"]\n", len(dW.clusterOrder), shortId(id))
+		nodeStr = fmt.Sprintf("C%d [label=\"%s\" color=\"blue2\"]\n", len(dW.clusterOrder), shortID(id))
 		dW.clusterOrder[id] = len(dW.clusterOrder)
 	case tIpfs:
-		nodeStr = fmt.Sprintf("I%d [label=\"%s\" color=\"goldenrod\"]\n", len(dW.ipfsOrder), shortId(id))
+		nodeStr = fmt.Sprintf("I%d [label=\"%s\" color=\"goldenrod\"]\n", len(dW.ipfsOrder), shortID(id))
 		dW.ipfsOrder[id] = len(dW.ipfsOrder)
 	default:
 		return errUnknownNodeType
@@ -257,7 +256,7 @@ func sortedKeys(dict map[string][]string) []string {
 // the chances of a collision are still less than 1 in 100 (birthday paradox).
 // As clusters grow bigger than this we can provide a flag for including
 // more characters.
-func shortId(peerString string) string {
+func shortID(peerString string) string {
 	pid, err := peer.IDB58Decode(peerString)
 	if err != nil {
 		// We'll truncate ourselves

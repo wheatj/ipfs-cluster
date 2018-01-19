@@ -46,36 +46,36 @@ func (c *Cluster) ConnectGraph() (api.ConnectGraph, error) {
 
 func (c *Cluster) recordClusterLinks(cg *api.ConnectGraph, p peer.ID, sPeers []api.IDSerial) (bool, api.ID) {
 	selfConnection := false
-	var pId api.ID
-	for _, sId := range sPeers {
-		id := sId.ToID()
+	var pID api.ID
+	for _, sID := range sPeers {
+		id := sID.ToID()
 		if id.Error != "" {
 			logger.Debugf("Peer %s errored connecting to its peer %s", p.Pretty(), id.ID.Pretty())
 			continue
 		}
 		if id.ID == p {
 			selfConnection = true
-			pId = id
+			pID = id
 		} else {
 			cg.ClusterLinks[p] = append(cg.ClusterLinks[p], id.ID)
 		}
 	}
-	return selfConnection, pId
+	return selfConnection, pID
 }
 
-func (c *Cluster) recordIPFSLinks(cg *api.ConnectGraph, pId api.ID) {
-	ipfsId := pId.IPFS.ID
-	if pId.IPFS.Error != "" { // Only setting ipfs connections when no error occurs
-		logger.Warningf("ipfs id: %s has error: %s. Skipping swarm connections", ipfsId.Pretty(), pId.IPFS.Error)
+func (c *Cluster) recordIPFSLinks(cg *api.ConnectGraph, pID api.ID) {
+	ipfsID := pID.IPFS.ID
+	if pID.IPFS.Error != "" { // Only setting ipfs connections when no error occurs
+		logger.Warningf("ipfs id: %s has error: %s. Skipping swarm connections", ipfsID.Pretty(), pID.IPFS.Error)
 		return
 	}
-	if _, ok := cg.IPFSLinks[pId.ID]; ok {
-		logger.Warningf("ipfs id: %s already recorded, one ipfs daemon in use by multiple cluster peers", ipfsId.Pretty())
+	if _, ok := cg.IPFSLinks[pID.ID]; ok {
+		logger.Warningf("ipfs id: %s already recorded, one ipfs daemon in use by multiple cluster peers", ipfsID.Pretty())
 	}
-	cg.ClustertoIPFS[pId.ID] = ipfsId
-	cg.IPFSLinks[ipfsId] = make([]peer.ID, 0)
+	cg.ClustertoIPFS[pID.ID] = ipfsID
+	cg.IPFSLinks[ipfsID] = make([]peer.ID, 0)
 	var swarmPeersS api.SwarmPeersSerial
-	err := c.rpcClient.Call(pId.ID,
+	err := c.rpcClient.Call(pID.ID,
 		"Cluster",
 		"IPFSSwarmPeers",
 		struct{}{},
@@ -85,5 +85,5 @@ func (c *Cluster) recordIPFSLinks(cg *api.ConnectGraph, pId api.ID) {
 		return
 	}
 	swarmPeers := swarmPeersS.ToSwarmPeers()
-	cg.IPFSLinks[ipfsId] = swarmPeers
+	cg.IPFSLinks[ipfsID] = swarmPeers
 }

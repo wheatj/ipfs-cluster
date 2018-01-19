@@ -295,8 +295,8 @@ type ConnectGraphSerial struct {
 
 // ToSerial converts a ConnectGraph to its Go-serializable version
 func (cg ConnectGraph) ToSerial() ConnectGraphSerial {
-	IPFSLinksSerial := SerializeLinkMap(cg.IPFSLinks)
-	ClusterLinksSerial := SerializeLinkMap(cg.ClusterLinks)
+	IPFSLinksSerial := serializeLinkMap(cg.IPFSLinks)
+	ClusterLinksSerial := serializeLinkMap(cg.ClusterLinks)
 	ClustertoIPFSSerial := make(map[string]string)
 	for k, v := range cg.ClustertoIPFS {
 		ClustertoIPFSSerial[peer.IDB58Encode(k)] = peer.IDB58Encode(v)
@@ -320,13 +320,13 @@ func (cgs ConnectGraphSerial) ToConnectGraph() ConnectGraph {
 	pid, _ := peer.IDB58Decode(cgs.ClusterID)
 	return ConnectGraph{
 		ClusterID:     pid,
-		IPFSLinks:     DeserializeLinkMap(cgs.IPFSLinks),
-		ClusterLinks:  DeserializeLinkMap(cgs.ClusterLinks),
+		IPFSLinks:     deserializeLinkMap(cgs.IPFSLinks),
+		ClusterLinks:  deserializeLinkMap(cgs.ClusterLinks),
 		ClustertoIPFS: ClustertoIPFS,
 	}
 }
 
-func SerializeLinkMap(Links map[peer.ID][]peer.ID) map[string][]string {
+func serializeLinkMap(Links map[peer.ID][]peer.ID) map[string][]string {
 	LinksSerial := make(map[string][]string)
 	for k, v := range Links {
 		kS := peer.IDB58Encode(k)
@@ -335,7 +335,7 @@ func SerializeLinkMap(Links map[peer.ID][]peer.ID) map[string][]string {
 	return LinksSerial
 }
 
-func DeserializeLinkMap(LinksSerial map[string][]string) map[peer.ID][]peer.ID {
+func deserializeLinkMap(LinksSerial map[string][]string) map[peer.ID][]peer.ID {
 	Links := make(map[peer.ID][]peer.ID)
 	for k, v := range LinksSerial {
 		pid, _ := peer.IDB58Decode(k)

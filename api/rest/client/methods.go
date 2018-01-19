@@ -164,7 +164,7 @@ func (c *Client) Version() (api.Version, error) {
 	return ver, err
 }
 
-// GetConnectionGraph returns an ipfs-cluster connection graph.
+// GetConnectGraph returns an ipfs-cluster connection graph.
 // The serialized version, strings instead of pids, is returned
 func (c *Client) GetConnectGraph() (api.ConnectGraphSerial, error) {
 	var graphS api.ConnectGraphSerial
